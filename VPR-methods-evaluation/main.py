@@ -74,7 +74,21 @@ def main(args):
         np.save(log_dir / "database_descriptors.npy", database_descriptors)
 
     # Use a kNN to find predictions
-    faiss_index = faiss.IndexFlatL2(args.descriptors_dimension)
+    if args.faiss_metric == "cosine":
+        # Normalize descriptors for cosine similarity (dot product on normalized vectors)
+        logger.info("Using cosine similarity (dot product with L2-normalized descriptors)")
+        faiss.normalize_L2(database_descriptors)
+        faiss.normalize_L2(queries_descriptors)
+        faiss_index = faiss.IndexFlatIP(args.descriptors_dimension)
+    elif args.faiss_metric == "dot":
+        # Use raw dot product (inner product)
+        logger.info("Using raw dot product (inner product)")
+        faiss_index = faiss.IndexFlatIP(args.descriptors_dimension)
+    else:
+        # Use L2 distance (default)
+        logger.info("Using L2 distance")
+        faiss_index = faiss.IndexFlatL2(args.descriptors_dimension)
+    
     faiss_index.add(database_descriptors)
     del database_descriptors, all_descriptors
 

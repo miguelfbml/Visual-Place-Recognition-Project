@@ -96,6 +96,13 @@ def parse_arguments():
         action="store_true",
         help="set to True if you want to save the data for uncertainty estimation",
     )
+    parser.add_argument(
+        "--faiss_metric",
+        type=str,
+        default="l2",
+        choices=["l2", "cosine", "dot"],
+        help="Distance metric for FAISS: 'l2' for L2 distance, 'cosine' for dot product with normalized descriptors, 'dot' for raw dot product",
+    )
     args = parser.parse_args()
 
     args.use_labels = not args.no_labels
