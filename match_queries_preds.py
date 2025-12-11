@@ -3,6 +3,7 @@ import os
 import sys
 import argparse
 import torch
+import time
 from glob import glob
 from tqdm import tqdm
 from pathlib import Path
@@ -55,11 +56,19 @@ def main(args):
     start_query = start_query if start_query >= 0 else 0
     num_queries = num_queries if num_queries >= 0 else len(txt_files)
 
+    # Timing measurements
+    total_matching_time = 0
+    total_queries_processed = 0
+    
     for txt_file in tqdm(txt_files[start_query : start_query + num_queries]):
         q_num = Path(txt_file).stem
         out_file = output_folder.joinpath(f"{q_num}.torch")
         if out_file.exists():
             continue
+        
+        # Start timing for this query
+        query_start_time = time.time()
+        
         results = []
         q_path, pred_paths = read_file_preds(txt_file)
         img0 = matcher.load_image(q_path, resize=img_size)
@@ -69,6 +78,23 @@ def main(args):
             result["all_desc0"] = result["all_desc1"] = None
             results.append(result)
         torch.save(results, out_file)
+        
+        # End timing for this query
+        query_time = time.time() - query_start_time
+        total_matching_time += query_time
+        total_queries_processed += 1
+    
+    # Report average matching time per query
+    if total_queries_processed > 0:
+        avg_matching_time = total_matching_time / total_queries_processed
+        print(f"\n{'='*50}")
+        print(f"Matching Performance Summary ({matcher_name})")
+        print(f"{'='*50}")
+        print(f"Total queries processed: {total_queries_processed}")
+        print(f"Predictions matched per query: {num_preds}")
+        print(f"Average time per query: {avg_matching_time:.4f} seconds")
+        print(f"Average time per match: {avg_matching_time/num_preds:.4f} seconds")
+        print(f"{'='*50}\n")
 
 if __name__ == "__main__":
     args = parse_arguments()
