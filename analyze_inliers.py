@@ -15,6 +15,8 @@ def parse_arguments():
                         help='Matcher name (e.g., superpoint-lg, loftr, superglue)')
     parser.add_argument('--output-dir', type=str, default='analysis_results',
                         help='Directory to save analysis plots')
+    parser.add_argument('--positive-dist-threshold', type=float, default=25,
+                        help='Distance threshold in meters for correct prediction (default: 25)')
     return parser.parse_args()
 
 
@@ -39,8 +41,16 @@ def load_ground_truth(preds_dir):
     return gt_dict
 
 
-def check_correct_prediction(preds_dir):
-    """Check which queries have correct R@1 (first prediction is correct)"""
+def check_correct_prediction(preds_dir, positive_dist_threshold=25):
+    """Check which queries have correct R@1 (first prediction is correct)
+    
+    Args:
+        preds_dir: Directory containing prediction .txt files
+        positive_dist_threshold: Distance threshold in meters for correct prediction (default: 25m)
+    
+    Returns:
+        dict: query_id -> bool (True if R@1 is correct)
+    """
     correct_queries = {}
     txt_files = sorted(glob(os.path.join(preds_dir, "*.txt")),
                        key=lambda x: int(Path(x).stem))
@@ -48,23 +58,43 @@ def check_correct_prediction(preds_dir):
     for txt_file in txt_files:
         query_id = Path(txt_file).stem
         with open(txt_file, 'r') as f:
-            lines = f.readlines()
-            query_path = lines[0].strip()
+            lines = [line.strip() for line in f.readlines()]
             
-            # Get ground truth from query filename
-            # Assuming format: path/to/query/@xxxx.jpg where xxxx is the GT
-            query_name = Path(query_path).stem
-            if '@' in query_name:
-                gt_id = query_name.split('@')[1]
-            else:
-                gt_id = None
+            # File format:
+            # Line 0: "Query path:"
+            # Line 1: actual query path
+            # Line 2: blank
+            # Line 3: "Predictions paths:"
+            # Line 4+: prediction paths
+            query_path = lines[1]
             
-            # First prediction
-            first_pred = lines[1].strip().split()[0]
-            pred_name = Path(first_pred).stem
+            # Extract UTM coordinates from query
+            # Format: path/to/@utm_easting@utm_northing@...@.jpg
+            try:
+                query_parts = query_path.split('@')
+                query_utm_e = float(query_parts[1])
+                query_utm_n = float(query_parts[2])
+            except (IndexError, ValueError):
+                print(f"Warning: Could not extract UTM from query: {query_path}")
+                correct_queries[query_id] = False
+                continue
             
-            # Check if prediction is correct
-            is_correct = (gt_id is not None and gt_id in pred_name)
+            # Extract UTM coordinates from first prediction (line 4)
+            first_pred = lines[4]
+            try:
+                pred_parts = first_pred.split('@')
+                pred_utm_e = float(pred_parts[1])
+                pred_utm_n = float(pred_parts[2])
+            except (IndexError, ValueError):
+                print(f"Warning: Could not extract UTM from prediction: {first_pred}")
+                correct_queries[query_id] = False
+                continue
+            
+            # Calculate Euclidean distance
+            distance = np.sqrt((query_utm_e - pred_utm_e)**2 + (query_utm_n - pred_utm_n)**2)
+            
+            # Check if prediction is correct (within threshold)
+            is_correct = (distance <= positive_dist_threshold)
             correct_queries[query_id] = is_correct
     
     return correct_queries
@@ -92,7 +122,7 @@ def load_inliers(preds_dir, matcher_name):
         if not query_id.isdigit():
             continue
             
-        results = torch.load(torch_file)
+        results = torch.load(torch_file, weights_only=False)
         # First prediction's inliers
         if len(results) > 0:
             first_result = results[0]
@@ -248,7 +278,7 @@ def main():
     
     # Check R@1 correctness
     print("Checking R@1 correctness...")
-    correct_queries = check_correct_prediction(args.preds_dir)
+    correct_queries = check_correct_prediction(args.preds_dir, args.positive_dist_threshold)
     
     # Load inliers
     print("Loading inlier counts...")
