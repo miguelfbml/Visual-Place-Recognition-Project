@@ -73,24 +73,19 @@ def check_correct_prediction(preds_dir):
 def load_inliers(preds_dir, matcher_name):
     """Load inlier counts from matching results"""
     inliers_dict = {}
-    inliers_path = Path(preds_dir) / f"inliers_{matcher_name}.torch"
     
-    if not inliers_path.exists():
-        # Try alternative location
-        inliers_path = Path(preds_dir + f"_{matcher_name}") / f"inliers_{matcher_name}.torch"
-    
-    if not inliers_path.exists():
-        raise FileNotFoundError(f"Inliers file not found: {inliers_path}")
-    
-    # Load torch files for each query
+    # Load torch files for each query from the original preds directory
     torch_files = sorted(glob(os.path.join(preds_dir, "*.torch")),
                         key=lambda x: int(Path(x).stem) if Path(x).stem.isdigit() else 0)
     
-    # Alternative: load from matcher output directory
+    # If not found, try matcher output directory
     if not torch_files:
         matcher_output_dir = preds_dir + f"_{matcher_name}"
         torch_files = sorted(glob(os.path.join(matcher_output_dir, "*.torch")),
                            key=lambda x: int(Path(x).stem) if Path(x).stem.isdigit() else 0)
+    
+    if not torch_files:
+        raise FileNotFoundError(f"No .torch files found in {preds_dir} or {preds_dir}_{matcher_name}")
     
     for torch_file in torch_files:
         query_id = Path(torch_file).stem
