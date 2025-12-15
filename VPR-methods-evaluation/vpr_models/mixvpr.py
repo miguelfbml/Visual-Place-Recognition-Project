@@ -94,15 +94,20 @@ class MixVPR(nn.Module):
 ### otherwise `self.backbone = ResNet()` will fail
 ### (academic purpose)
 class ResNet(nn.Module):
-    def __init__(self):
+    def __init__(self, pretrained=True):
         super().__init__()
-        self.model = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.DEFAULT)
-        # remove the avgpool and most importantly the fc layer
+        
+        if pretrained:
+            self.model = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V1)
+        else:
+            self.model = torchvision.models.resnet50(weights=None)
+        
+        # Remove classification layers
         self.model.avgpool = nn.Identity()
         self.model.fc = nn.Identity()
-        out_channels = 2048
-        self.out_channels = out_channels // 2 if self.model.layer4 is None else out_channels
-        self.out_channels = self.out_channels // 2 if self.model.layer3 is None else self.out_channels
+        # MixVPR was trained with layer3 output only (1024 channels)
+        self.model.layer4 = nn.Identity()
+        self.out_channels = 1024
 
     def forward(self, x):
         x = self.model.conv1(x)
@@ -112,7 +117,6 @@ class ResNet(nn.Module):
         x = self.model.layer1(x)
         x = self.model.layer2(x)
         x = self.model.layer3(x)
-        x = self.model.layer4(x)
         return x
 
 
